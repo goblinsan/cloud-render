@@ -2,6 +2,7 @@ import json
 import time
 import urllib.parse
 import uuid
+from datetime import datetime
 
 import boto3
 
@@ -19,43 +20,47 @@ def execute(event, context):
         response = s3.get_object(Bucket=bucket, Key=key)
         body_read = json.loads(response['Body'].read())
         print(f"Response Body: {body_read}")
-        fileName = body_read["fileName"]
+        file_name = body_read["file_name"]
         frames = body_read["frames"]
-        outputName = body_read["outputName"]
+        output_name = body_read["output_name"]
 
         id_db = uuid.uuid4()
         ts = time.time()
-        dynamo.put_item(TableName='render-jobs',
+        readable_time = datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+        dynamo.put_item(TableName='render_jobs',
                         Item={
-                            'render-job-id': {'S': str(id_db)},
-                            'startTime': {'S': str(ts)},
-                            'secondsToExpire': {'N': '300'},  # 5 minutes
-                            'fileName': {'S': fileName},
+                            'render_job_id': {'S': str(id_db)},
+                            'start_time': {'S': str(readable_time)},
+                            'seconds_to_expire': {'N': '300'},  # 5 minutes
+                            'file_name': {'S': file_name},
                             'frames': {'N': str(frames)},
-                            'outputName': {'S': outputName}})
+                            'output_name': {'S': output_name}})
 
         queue_url = 'https://sqs.us-east-2.amazonaws.com/056985368977/render-queue'
+        entries = []
         for i in range(frames):
-            sqs.send_message(
-                QueueUrl=queue_url,
-                MessageAttributes={
-                    'RenderJobId': {
-                        'DataType': 'String',
-                        'StringValue': str(id_db)
-                    },
-                    'File': {
-                        'DataType': 'String',
-                        'StringValue': fileName
-                    },
-                    'Frame': {
-                        'DataType': 'Number',
-                        'StringValue': str(i + 1)
-                    }
-                },
-                MessageBody=(
-                    'Render frame :' + str(i + 1)
-                )
-            )
+            entry = {"Id": str(i),
+                     "MessageBody": "Render frame :" + str(i + 1),
+                     "MessageAttributes": {
+                         'RenderJobId': {
+                             'DataType': 'String',
+                             'StringValue': str(id_db)
+                         },
+                         'File': {
+                             'DataType': 'String',
+                             'StringValue': file_name
+                         },
+                         'Frame': {
+                             'DataType': 'Number',
+                             'StringValue': str(i + 1)
+                         }}
+                     }
+            entries.append(entry)
+
+        max_sqs_batch_size = 10
+        response = []
+        for batch in chunks(entries, max_sqs_batch_size):
+            response.extend(sqs.send_message_batch(Entries=batch, QueueUrl=queue_url))
 
         return body_read
     except Exception as e:
@@ -64,3 +69,19 @@ def execute(event, context):
             'Error getting object {} from bucket {}. Make sure they exist and your bucket is in the same region as this function.'.format(
                 key, bucket))
         raise e
+
+
+def chunks(l, n):
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
+
+# https://stackoverflow.com/questions/312443/how-do-i-split-a-list-into-equally-sized-chunks/312464#312464
+# import pprint
+# pprint.pprint(list(chunks(range(10, 75), 10)))
+# [[10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+#  [20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+#  [30, 31, 32, 33, 34, 35, 36, 37, 38, 39],
+#  [40, 41, 42, 43, 44, 45, 46, 47, 48, 49],
+#  [50, 51, 52, 53, 54, 55, 56, 57, 58, 59],
+#  [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
+#  [70, 71, 72, 73, 74]]

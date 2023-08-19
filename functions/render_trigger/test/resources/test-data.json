@@ -1,5 +1,5 @@
 {
-  "fileName": "someProject/fakeFile.blend",
-  "frames": 123,
-  "outputName": "makeItThisName"
+  "file_name": "someProject/fakeFile.blend",
+  "frames": 3,
+  "output_name": "makeItThisName"
 }
