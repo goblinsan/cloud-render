@@ -19,7 +19,7 @@ class TestExecuteHandler(unittest.TestCase):
 
         s3_client = boto3.client("s3", region_name="us-east-1")
 
-        with open("resources/test-date.json", "rb") as test_file:
+        with open("resources/test-data.json", "rb") as test_file:
             s3_client.put_object(Bucket=self.bucket_name, Key="EXAMPLE-PREFIX/example.json", Body=test_file, ContentType="application/json")
 
     def test_execute(self):
@@ -28,7 +28,9 @@ class TestExecuteHandler(unittest.TestCase):
 
         result = execute(event, "")
 
-        self.assertEqual(result, "application/json")
+        self.assertEqual(result["fileName"], "someProject/fakeFile.blend")
+        self.assertEqual(result["frames"], 123)
+        self.assertEqual(result["outputName"], "makeItThisName")
 
 
 
