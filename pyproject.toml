@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "cloud-render"
+version = "0.1.0"
+description = ""
+authors = ["goblinsan <coghlanjames@yahoo.com>"]
+readme = "README.md"
+packages = [{include = "render_trigger"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+boto3 = "^1.28.30"
+moto = "^4.1.14"
+
+[tool.poetry.group.test.dependencies]
+moto = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
