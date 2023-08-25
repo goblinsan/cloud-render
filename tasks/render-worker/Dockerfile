@@ -1,3 +1,15 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:5632663dac3523618b48e250342e8e7bf8bdadf06585837f0ca9a611f3e678a7
-size 324
+FROM python:3.11-slim-bookworm
+
+ADD blender_binary/blender-3.6.2-linux-x64.tar.xz /bin/blender/3.6.2/
+
+ENV BLENDER_PATH ="/bin/blender/3.6.2/"
+
+WORKDIR /app
+
+COPY ./src /app
+
+RUN pip install -r requirements.txt
+
+ENV SQS_QUEUE=https://sqs.us-east-2.amazonaws.com/056985368977/render-queue
+
+ENTRYPOINT python render_worker.py
