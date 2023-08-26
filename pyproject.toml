@@ -12,8 +12,21 @@ boto3 = "^1.28.30"
 moto = "^4.1.14"
 
 [tool.poetry.group.test.dependencies]
-moto = "*"
+moto = "^4.2.0"
+pytest = "^7.4.0"
+pytest-env = "^1.0.1"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+env = [
+    "S3_BUCKET=EXAMPLE-BUCKET",
+    "SQS_QUEUE=EXAMPLE-QUEUE",
+    "AWS_ACCESS_KEY_ID=testing",
+    "AWS_SECRET_ACCESS_KEY=testing",
+    "AWS_SECURITY_TOKEN=testing",
+    "AWS_SESSION_TOKEN=testing",
+    "AWS_DEFAULT_REGION=us-east-1",
+]
