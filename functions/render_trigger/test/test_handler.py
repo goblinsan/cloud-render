@@ -91,11 +91,13 @@ def test_execute(s3, dynamo, sqs, patch_time, patch_uuid):
 
     result = execute(event, "")
 
+
     get_item_response = dynamo.get_item(TableName='render_jobs',
                                         Key={'render_job_id': {'S': '12345678-1234-5678-1234-567812345678'},
-                                             'start_time': {'S': '1970-01-01 00-00-01'}})
+                                             'start_time': {'S': '1970-01-01 00:00:01'}})
 
-    assert get_item_response['ResponseMetadata']['HTTPStatusCode'] == 200
+    print(get_item_response)
+    assert 'Item' in get_item_response.keys()
     assert result.file_name == "test/default_cube.blend"
     assert result.frames == 1
     assert result.output_name == "first_render"
