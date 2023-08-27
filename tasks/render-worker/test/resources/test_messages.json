@@ -1,0 +1,36 @@
+{
+  "Messages": [
+    {
+      "Body": "{\"s3_bucket\": \"EXAMPLE-BUCKET\", \"object_name\": \"some/fake/path_00003\"}",
+      "MD5OfBody": "c32b296c8a0d34abcc7f0afc824310f7",
+      "MD5OfMessageAttributes": "fd86bde80cb9992fbe00d7cadbe96b92",
+      "MessageAttributes": {
+        "Render_File": {
+          "DataType": "String",
+          "StringValue": "some_blend_file.blend"
+        },
+        "Render_Frame": {
+          "DataType": "Number",
+          "StringValue": "3"
+        },
+        "Render_JobId": {
+          "DataType": "String",
+          "StringValue": "some_uuid"
+        }
+      },
+      "MessageId": "6cfec83a-1e05-4938-88c6-51a773a0bb94",
+      "ReceiptHandle": "efcnosioiwvlwdexvhofsgxtxjajdqvristlepqbnxeudkxkcypiprzubpucmncmeqrjzfjzakefscsnqtitndlgaaetqnuxvcfsvliyccooubjpyceundnzyvgxmkbmpxabwxyedsnceuxefgfvwuojvgxedsffpevroksmtbsyynpytbxskknlz"
+    }
+  ],
+  "ResponseMetadata": {
+    "HTTPHeaders": {
+      "date": "Sun, 27 Aug 2023 12:24:56 GMT",
+      "server": "amazon.com",
+      "x-amz-crc32": "2807687471",
+      "x-amzn-requestid": "Uq56K4eqTeJfcDjjAKiqXJ3O7AYPdmVEMeSTR2oFiZm4YpxUdqhF"
+    },
+    "HTTPStatusCode": 200,
+    "RequestId": "Uq56K4eqTeJfcDjjAKiqXJ3O7AYPdmVEMeSTR2oFiZm4YpxUdqhF",
+    "RetryAttempts": 0
+  }
+}

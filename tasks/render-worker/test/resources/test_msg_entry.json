@@ -1,0 +1,18 @@
+{
+  "Id": "2",
+  "MessageAttributes": {
+    "Render_File": {
+      "DataType": "String",
+      "StringValue": "some_blend_file.blend"
+    },
+    "Render_Frame": {
+      "DataType": "Number",
+      "StringValue": "3"
+    },
+    "Render_JobId": {
+      "DataType": "String",
+      "StringValue": "some_uuid"
+    }
+  },
+  "MessageBody": "{\"s3_bucket\": \"EXAMPLE-BUCKET\", \"object_name\": \"some/fake/path_00003\"}"
+}

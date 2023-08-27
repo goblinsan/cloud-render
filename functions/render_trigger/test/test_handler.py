@@ -91,7 +91,6 @@ def test_execute(s3, dynamo, sqs, patch_time, patch_uuid):
 
     result = execute(event, "")
 
-
     get_item_response = dynamo.get_item(TableName='render_jobs',
                                         Key={'render_job_id': {'S': '12345678-1234-5678-1234-567812345678'},
                                              'start_time': {'S': '1970-01-01 00:00:01'}})
@@ -155,3 +154,14 @@ def test_path_friendly_filename():
     expected_output = 'not_a_blend_file'
 
     assert expected_output == path_friendly_filename(filename)
+
+
+def test_create_sqs_entry():
+    with open("resources/test_msg_entry.json") as file:
+        expected_output = json.load(file)
+    file_name = 'some_blend_file.blend'
+    frame = 2
+    id_db = 'some_uuid'
+    full_output_path = 'some/fake/path'
+    actual_output = create_sqs_entry(file_name, frame, id_db, full_output_path)
+    assert expected_output == actual_output

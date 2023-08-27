@@ -42,8 +42,8 @@ def execute(event, context):
 
 def put_jobs_on_queue(job_meta, msg_body):
     entries = []
-    for i in range(msg_body.frames):
-        entry = create_sqs_entry(msg_body.file_name, i, job_meta.id_db, job_meta.full_output_path)
+    for frame in range(msg_body.frames):
+        entry = create_sqs_entry(msg_body.file_name, frame, job_meta.id_db, job_meta.full_output_path)
         entries.append(entry)
     max_sqs_batch_size = 10
     response = []
@@ -70,21 +70,21 @@ def get_time():
     return readable_time
 
 
-def create_sqs_entry(file_name, i, id_db, full_output_path):
-    entry = {"Id": str(i),
-             "MessageBody": create_message_body(i, full_output_path),
+def create_sqs_entry(file_name, frame, id_db, full_output_path):
+    entry = {"Id": str(frame),
+             "MessageBody": create_message_body(frame, full_output_path),
              "MessageAttributes": {
-                 'RenderJobId': {
+                 'Render_JobId': {
                      'DataType': 'String',
                      'StringValue': str(id_db)
                  },
-                 'File': {
+                 'Render_File': {
                      'DataType': 'String',
                      'StringValue': file_name
                  },
-                 'Frame': {
+                 'Render_Frame': {
                      'DataType': 'Number',
-                     'StringValue': str(i + 1)
+                     'StringValue': str(frame + 1)
                  }}
              }
     return entry
@@ -94,7 +94,6 @@ def create_message_body(i, full_output_path):
     frame_as_string = str(i + 1)
     padded_frame_as_string = str(i + 1).zfill(5)
     message_body = {
-        'frame': frame_as_string,
         's3_bucket': S3_BUCKET,
         'object_name': full_output_path + '_' + padded_frame_as_string
     }
