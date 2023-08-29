@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import re
 import subprocess
 from types import SimpleNamespace
 
@@ -32,29 +33,8 @@ def ensure_envvars():
         raise AssertionError(message)
 
 
-def create_blender_command(blender_path, output_path, instruction):
-    return [blender_path, "-b", "file.blend", "-o", f"{output_path}\\output_file_", "-f", str(instruction.render_frame)]
-
-
-def render_frame(s3, instruction):
-    logger.info(f"Rendering : {instruction.render_file} Frame: {instruction.render_frame}")
-
-    try:
-        s3.download_file(instruction.s3_bucket, instruction.render_file, './file.blend')
-    except ClientError as err:
-        deal_with_error(err)
-
-    # path in docker is "/bin/blender/3.6.2/blender"
-    blender_path = os.environ.get('BLENDER_PATH', "/bin/blender/3.6.2/blender")
+def put_render_in_s3(instruction, s3):
     current_dir = os.getcwd()
-
-    blender_command = create_blender_command(blender_path, current_dir, instruction)
-    try:
-        subprocess.run(blender_command, check=True)
-    except subprocess.CalledProcessError as e:
-        logger.error(e.stderr)
-
-    # put the resulting file in the output bucket
     try:
         path = f"{current_dir}\\output_file_*"
         for filename in glob.glob(path):
@@ -66,35 +46,74 @@ def render_frame(s3, instruction):
         deal_with_error(err)
 
 
-def deal_with_error(err):
-    if err.response['Error']['Code'] == 'InternalError':
-        print('Error Message: {}'.format(err.response['Error']['Message']))
-        print('Request ID: {}'.format(err.response['ResponseMetadata']['RequestId']))
-        print('Http code: {}'.format(err.response['ResponseMetadata']['HTTPStatusCode']))
-    else:
-        raise err
+def create_blender_command(instruction, gpu_script_path, gpu_flag, gpu_name):
+    blender_path = os.environ.get('BLENDER_PATH', "/bin/blender/3.6.2/blender")
+    current_dir = os.getcwd()
+    gpu_script = "render_with_gpu.py"
+    if gpu_script_path:
+        gpu_script = gpu_script_path + gpu_script
+    base_command = [blender_path,
+                    "-b", "file.blend",
+                    "-o", f"{current_dir}\\output_file_",
+                    "-P", gpu_script,
+                    "-f", str(instruction.render_frame)]
+    if gpu_flag:
+        base_command.extend(["--", gpu_name])
+
+    return base_command
 
 
-def get_aws_clients():
-    s3 = boto3.resource("s3")
-    sqs = boto3.client("sqs")
-    return s3, sqs
+def render_frame(blender_command):
+    logger.info(f"Running this Blender Command : {blender_command}")
 
-
-def get_messages(sqs):
-    logger.info(f"SQS Consumer starting for : {os.environ['SQS_QUEUE']}")
     try:
-        response = sqs.receive_message(
-            QueueUrl=os.environ["SQS_QUEUE"],
-            MessageAttributeNames=['All'],
-            MaxNumberOfMessages=1,
-            WaitTimeSeconds=1
-        )
-    except ClientError as error:
-        logger.exception("Couldn't receive messages from queue: %s", os.environ["SQS_QUEUE"])
-        raise error
+        subprocess.run(blender_command, check=True)
+    except subprocess.CalledProcessError as e:
+        logger.error(e.stderr)
+
+
+def save_blend_file_locally(instruction, s3):
+    try:
+        s3.download_file(instruction.s3_bucket, instruction.render_file, './file.blend')
+    except ClientError as err:
+        deal_with_error(err)
+
+
+def select_best_gpu(gpu_list):
+    gpu_names = []
+    for gpu in gpu_list:
+        m = re.search("GPU [0-9]+: (.+?) \(UUID", gpu)
+        if m:
+            gpu_names.append(m.group(1))
+        else:
+            logger.error("Couldn't find the GPU name returned from nvidia-smi")
+    rtx_gpu_filter = filter(lambda a: 'RTX' in a, gpu_names)
+    rtx_list = list(rtx_gpu_filter)
+    if rtx_list:
+        selected_gpu = rtx_list[0]
     else:
-        return response
+        selected_gpu = gpu_names[0]
+
+    return selected_gpu
+
+
+def use_gpu():
+    try:
+        cmd_output = subprocess.check_output(['nvidia-smi', '-L'])
+        logger.info('Nvidia GPU detected!')
+        gpu_list = cmd_output.decode('utf-8').strip().split('\n')
+        selected_gpu = select_best_gpu(gpu_list)
+        return True, selected_gpu
+    except Exception as e:
+        logger.info('No Nvidia GPU detected or Error Selecting GPU: ' + str(e))
+        return False, None
+
+
+def process_instruction(gpu_flag, gpu_name, instruction, s3):
+    save_blend_file_locally(instruction, s3)
+    blender_cmd = create_blender_command(instruction, None, gpu_flag, gpu_name)
+    render_frame(blender_cmd)
+    put_render_in_s3(instruction, s3)
 
 
 def extract_instruction(message):
@@ -118,7 +137,7 @@ def extract_instructions_from_messages(messages, sqs):
             logger.info(f"try to extract this message body: {message}")
             instructions.append(extract_instruction(message))
         except Exception as e:
-            print(f"Exception while processing message: {repr(e)}")
+            logger.error(f"Exception while processing message: {repr(e)}")
             continue
         else:
             sqs.delete_message(
@@ -127,6 +146,37 @@ def extract_instructions_from_messages(messages, sqs):
             )
 
     return instructions
+
+
+def get_messages(sqs):
+    logger.info(f"SQS Consumer starting for : {os.environ['SQS_QUEUE']}")
+    try:
+        response = sqs.receive_message(
+            QueueUrl=os.environ["SQS_QUEUE"],
+            MessageAttributeNames=['All'],
+            MaxNumberOfMessages=1,
+            WaitTimeSeconds=1
+        )
+    except ClientError as error:
+        logger.exception("Couldn't receive messages from queue: %s", os.environ["SQS_QUEUE"])
+        raise error
+    else:
+        return response
+
+
+def get_aws_clients():
+    s3 = boto3.resource("s3")
+    sqs = boto3.client("sqs")
+    return s3, sqs
+
+
+def deal_with_error(err):
+    if err.response['Error']['Code'] == 'InternalError':
+        logger.error('Error Message: {}'.format(err.response['Error']['Message']))
+        logger.error('Request ID: {}'.format(err.response['ResponseMetadata']['RequestId']))
+        logger.error('Http code: {}'.format(err.response['ResponseMetadata']['HTTPStatusCode']))
+    else:
+        raise err
 
 
 def main():
@@ -141,7 +191,11 @@ def main():
         raise
 
     response = get_messages(sqs)
-    extract_instructions_from_messages(response['Messages'], sqs)
+    instructions = extract_instructions_from_messages(response['Messages'], sqs)
+    if instructions:
+        gpu_flag, gpu_name = use_gpu()
+        for instruction in instructions:
+            process_instruction(gpu_flag, gpu_name, instruction, s3)
 
 
 if __name__ == "__main__":

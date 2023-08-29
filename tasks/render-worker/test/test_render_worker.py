@@ -7,7 +7,7 @@ import pytest
 from moto import mock_s3, mock_sqs
 
 from render_worker import ensure_envvars, get_messages, extract_instructions_from_messages, extract_instruction, \
-    render_frame, create_blender_command
+    render_frame, create_blender_command, use_gpu, process_instruction
 
 
 @pytest.fixture
@@ -63,11 +63,12 @@ def test_ensure_envvars(set_envs):
     ensure_envvars()
 
 
-def test_render_frame(s3, sample_render_instruction, fp):
+def test_process_instruction(s3, sample_render_instruction, fp):
     # Mock subprocess
     current_dir = os.getcwd()
-    blender_command = ["/bin/blender/3.6.2/blender", "-b", "file.blend", "-o", f"{current_dir}\\output_file_", "-f",
-                       "3"]
+    default_blender = "/bin/blender/3.6.2/blender"
+    blender_command = [default_blender, "-b", "file.blend", "-o", f"{current_dir}\\output_file_",
+                       "-P", "render_with_gpu.py", "-f", "3"]
     fp.register(blender_command)
 
     # Create dummy rendered output file
@@ -75,7 +76,7 @@ def test_render_frame(s3, sample_render_instruction, fp):
     f.write('fake file')
     f.close()
 
-    render_frame(s3, sample_render_instruction)
+    process_instruction(False, None, sample_render_instruction, s3)
 
     # Assert output is written back to bucket
     s3.get_object(
@@ -86,6 +87,32 @@ def test_render_frame(s3, sample_render_instruction, fp):
     # delete files created during this test
     os.remove('file.blend')
     os.remove('output_file_0003.png')
+
+
+def test_render_frame(fp):
+    # Mock subprocess
+    current_dir = os.getcwd()
+    default_blender = "/bin/blender/3.6.2/blender"
+    blender_command = [default_blender, "-b", "file.blend", "-o", f"{current_dir}\\output_file_",
+                       "-P", "render_with_gpu.py", "-f", "3"]
+    fp.register(blender_command)
+
+    render_frame(blender_command)
+
+
+def test_use_gpu(fp):
+    fp.register(['nvidia-smi', '-L'],
+                stdout=["GPU 0: RTX 4060 (UUID: GPU-123) GPU 1: GTX 1060 (UUID: GPU-456)"])
+    gpu_flag, gpu_name = use_gpu()
+    assert gpu_flag
+    assert gpu_name == 'RTX 4060'
+
+
+def test_use_gpu_fails(fp):
+    fp.register(['nvidia-smi', '-L'], returncode=1)
+    gpu_flag, gpu_name = use_gpu()
+    assert not gpu_flag
+    assert gpu_name is None
 
 
 def test_get_messages(sqs):
@@ -119,7 +146,28 @@ def test_extract_instruction(sample_render_instruction):
 
 def test_create_blender_command(sample_render_instruction):
     current_dir = os.getcwd()
-    expected_output = ["/bin/blender/3.6.2/blender", "-b", "file.blend", "-o", f"{current_dir}\\output_file_", "-f",
-                       "3"]
-    actual_output = create_blender_command("/bin/blender/3.6.2/blender", current_dir, sample_render_instruction)
+    expected_output = ["/bin/blender/3.6.2/blender",
+                       "-b", "file.blend",
+                       "-o", f"{current_dir}\\output_file_",
+                       "-P", "render_with_gpu.py",
+                       "-f", "3"]
+    actual_output = create_blender_command(sample_render_instruction, None, False, None)
     assert actual_output == expected_output
+
+    expected_with_gpu = expected_output
+    expected_with_gpu.extend(["--", "some_gpu"])
+    actual_with_gpu = create_blender_command(sample_render_instruction, None,
+                                             True, "some_gpu")
+
+    assert actual_with_gpu == expected_with_gpu
+
+    expected_test_output = ["/bin/blender/3.6.2/blender",
+                            "-b", "file.blend",
+                            "-o", f"{current_dir}\\output_file_",
+                            "-P", "../src/render_with_gpu.py",
+                            "-f", "3"]
+
+    actual_test_output = create_blender_command(sample_render_instruction, "../src/",
+                                                False, None)
+
+    assert actual_test_output == expected_test_output
